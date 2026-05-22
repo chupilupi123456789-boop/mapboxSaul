@@ -1,166 +1,557 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <title>Mapbox</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mapbox - Seguimiento en Tiempo Real</title>
 
-  <!-- MAPBOX CSS -->
+  <!-- CSS de Mapbox para mostrar el mapa -->
   <link href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet" />
 
+  <!-- CSS de Mapbox Draw para dibujar geocercas en el mapa -->
+  <link href="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-draw/v1.4.3/mapbox-gl-draw.css" rel="stylesheet" />
+
   <style>
-  * {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-    font-family: 'Segoe UI', sans-serif;
-  }
+    /* ── Estilos generales ── */
+    * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
+    body { background: #0f172a; }
 
-  body {
-    background: #0f172a;
-  }
+    /* ── Mapa ocupa toda la pantalla ── */
+    #map { width: 100%; height: 100vh; }
 
-  #map {
-    width: 100%;
-    height: 100vh;
-  }
+    /* ── Barra inferior con lat/lon y hora ── */
+    .bottom-bar {
+      position: fixed;
+      bottom: 0;
+      height: 12.5%;
+      width: 100%;
+      backdrop-filter: blur(15px);
+      background: rgba(0,0,0,0.85);
+      color: white;
+      padding: 18px 25px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-top: 1px solid rgba(255,255,255,0.2);
+    }
+    .info-block { display: flex; flex-direction: column; }
+    .label {
+      font-size: 11px;
+      color: #94a3b8;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .value { font-size: 16px; font-weight: 600; color: white; }
 
-  .bottom-bar {
-    position: fixed;
-    bottom: 0;
-    height: 12.5%;
-    width: 100%;
-    backdrop-filter: blur(15px);
-    background: black;
-    color: white;
-    padding: 18px 25px;
-    display: flex;
-    justify-content: space-between;
-    align-items: start;
-    border-top: 1px solid rgb(255,255,255);
-  }
+    /* ── Panel de control de geocercas (esquina superior derecha) ── */
+    #panel-geocerca {
+      position: fixed;
+      top: 15px;
+      right: 15px;
+      background: rgba(15, 23, 42, 0.92);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 14px;
+      padding: 18px;
+      width: 260px;
+      color: white;
+      z-index: 999;
+    }
+    #panel-geocerca h3 {
+      font-size: 14px;
+      font-weight: 700;
+      color: #60a5fa;
+      margin-bottom: 14px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .campo-label {
+      font-size: 11px;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-bottom: 5px;
+    }
+    .campo-input {
+      width: 100%;
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 8px;
+      color: white;
+      padding: 8px 10px;
+      font-size: 13px;
+      margin-bottom: 12px;
+      outline: none;
+      transition: border 0.2s;
+    }
+    .campo-input:focus { border-color: #3b82f6; }
 
-  .info-block {
-    display: flex;
-    flex-direction: column;
-  }
+    /* Botones del panel */
+    .btn {
+      width: 100%;
+      padding: 10px;
+      border-radius: 8px;
+      border: none;
+      font-weight: 700;
+      font-size: 13px;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+      margin-bottom: 8px;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn-crear   { background: #3b82f6; color: white; }
+    .btn-borrar  { background: #ef4444; color: white; }
+    .btn:hover   { opacity: 0.88; }
 
-  .label {
-    font-size: 12px;
-    color: white;
-    margin-bottom: 4px;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-  }
+    /* Instrucción de uso */
+    .instruccion {
+      font-size: 11px;
+      color: #64748b;
+      margin-top: 4px;
+      line-height: 1.5;
+    }
 
-  .value {
-    font-size: 16px;
-    font-weight: 600;
-    color: white;
-  }
+    /* ── Indicador de estado de geocerca ── */
+    #estado-geocerca {
+      position: fixed;
+      top: 15px;
+      left: 15px;
+      background: rgba(15, 23, 42, 0.92);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 14px;
+      padding: 14px 18px;
+      color: white;
+      z-index: 999;
+      min-width: 210px;
+      display: none;
+    }
+    #estado-geocerca .estado-titulo {
+      font-size: 11px;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-bottom: 6px;
+    }
+    #estado-geocerca .estado-valor {
+      font-size: 15px;
+      font-weight: 700;
+    }
+    .estado-dentro  { color: #34d399; }
+    .estado-fuera   { color: #f87171; }
+    .estado-sin     { color: #94a3b8; }
 
-  .time {
-    text-align: right;
-  }
-
-  .time .value {
-    color: white;
-  }
-
-</style>
+    /* ── Notificación flotante cuando el dispositivo sale ── */
+    #notificacion {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: #1e293b;
+      border: 2px solid #f87171;
+      border-radius: 20px;
+      padding: 30px 36px;
+      color: white;
+      text-align: center;
+      z-index: 9999;
+      max-width: 380px;
+      display: none;
+      box-shadow: 0 25px 60px rgba(0,0,0,0.6);
+    }
+    #notificacion .noti-icono { font-size: 48px; margin-bottom: 12px; }
+    #notificacion .noti-titulo { font-size: 20px; font-weight: 800; color: #f87171; margin-bottom: 10px; }
+    #notificacion .noti-mensaje { font-size: 14px; color: #cbd5e1; line-height: 1.6; margin-bottom: 20px; }
+    #notificacion .noti-distancia { font-size: 13px; color: #64748b; margin-bottom: 20px; }
+    #btn-cerrar-noti {
+      background: #3b82f6;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      padding: 10px 28px;
+      font-weight: 700;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    /* Overlay oscuro detrás de la notificación */
+    #overlay {
+      position: fixed; top:0; left:0; width:100%; height:100%;
+      background: rgba(0,0,0,0.5);
+      z-index: 9998;
+      display: none;
+    }
+  </style>
 </head>
 
 <body>
 
+<!-- Mapa principal -->
 <div id="map"></div>
 
+<!-- Indicador de estado (izquierda arriba) -->
+<div id="estado-geocerca">
+  <div class="estado-titulo">Estado de geocerca</div>
+  <div class="estado-valor estado-sin" id="texto-estado">Sin geocerca activa</div>
+  <div style="font-size:11px; color:#64748b; margin-top:5px;" id="texto-distancia"></div>
+</div>
+
+<!-- Panel de control (derecha arriba) -->
+<div id="panel-geocerca">
+  <h3>🗺️ Geocercas</h3>
+
+  <div class="campo-label">Radio de la zona (metros)</div>
+  <input type="number" id="radio-input" class="campo-input" value="200" min="50" max="10000" placeholder="Ej: 200" />
+
+  <button class="btn btn-crear" onclick="crearGeocerca()">
+    📍 Crear geocerca en el mapa
+  </button>
+
+  <button class="btn btn-borrar" onclick="borrarGeocerca()">
+    🗑️ Eliminar geocerca
+  </button>
+
+  <p class="instruccion">
+    1. Ingresa el radio en metros<br>
+    2. Haz clic en "Crear geocerca"<br>
+    3. Haz clic sobre el mapa para colocar la zona
+  </p>
+</div>
+
+<!-- Overlay y notificación de salida de zona -->
+<div id="overlay" onclick="cerrarNotificacion()"></div>
+<div id="notificacion">
+  <div class="noti-icono">⚠️</div>
+  <div class="noti-titulo">Fuera del entorno</div>
+  <div class="noti-mensaje">
+    El dispositivo ha salido del área de seguimiento establecida.<br>
+    Por favor, regrese a la zona autorizada.
+  </div>
+  <div class="noti-distancia" id="noti-distancia-texto"></div>
+  <button id="btn-cerrar-noti" onclick="cerrarNotificacion()">Entendido</button>
+</div>
+
+<!-- Barra inferior con coordenadas -->
 <div class="bottom-bar">
   <div class="info-block">
     <div class="label">Latitud</div>
-    <div class="value" id="latitud"></div>
+    <div class="value" id="latitud">--</div>
   </div>
-
   <div class="info-block">
     <div class="label">Longitud</div>
-    <div class="value" id="longitud"></div>
+    <div class="value" id="longitud">--</div>
   </div>
-
-  <div class="info-block time">
+  <div class="info-block" style="text-align:right;">
     <div class="label">Última actualización</div>
-    <div class="value" id="hora"></div>
+    <div class="value" id="hora">--</div>
   </div>
 </div>
 
+<!-- ── Scripts ── -->
 
-<!-- scrip de mapbox -->
+<!-- SDK de Mapbox -->
 <script src="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"></script>
 
+<!-- Plugin para dibujar círculos y polígonos en el mapa -->
+<script src="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-draw/v1.4.3/mapbox-gl-draw.js"></script>
+
+<!-- SDK de Firebase -->
 <script type="module">
+import { initializeApp }          from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";
+import { getDatabase, ref, onValue, set, remove } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-database.js";
 
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";
-import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-database.js";
-
+// ── Configuración de Firebase ──────────────────────────────────────────────
 const firebaseConfig = {
-  apiKey: "AIzaSyAyszZqHJVRLjyQT6eNcArnfNQE9Hkq93I",
-  authDomain: "mapboxsaul.firebaseapp.com",
-  databaseURL: "https://mapboxsaul-default-rtdb.firebaseio.com",
-  projectId: "mapboxsaul",
-  storageBucket: "mapboxsaul.firebasestorage.app",
+  apiKey:            "AIzaSyAyszZqHJVRLjyQT6eNcArnfNQE9Hkq93I",
+  authDomain:        "mapboxsaul.firebaseapp.com",
+  databaseURL:       "https://mapboxsaul-default-rtdb.firebaseio.com",
+  projectId:         "mapboxsaul",
+  storageBucket:     "mapboxsaul.firebasestorage.app",
   messagingSenderId: "1028928690935",
-  appId: "1:1028928690935:web:7819894606e1f7c0d491f2",
-  measurementId: "G-ZT2ZMG74YM"
+  appId:             "1:1028928690935:web:7819894606e1f7c0d491f2",
+  measurementId:     "G-ZT2ZMG74YM"
 };
-
-const app = initializeApp(firebaseConfig);
+const app      = initializeApp(firebaseConfig);
 const database = getDatabase(app);
 
-/* mapbox tocken */
-
+// ── Token de acceso Mapbox ─────────────────────────────────────────────────
 mapboxgl.accessToken = "pk.eyJ1Ijoic2F1bHNhbmNob24iLCJhIjoiY21tOXhueDVkMDJtZzJ3cHJscmt0bTB5OSJ9.rlCojaq0KHdhbDjbJbUQzQ";
 
+// ── Inicialización del mapa ────────────────────────────────────────────────
 const map = new mapboxgl.Map({
   container: 'map',
-  style: 'mapbox://styles/mapbox/streets-v12',
-  center: [-68.15, -16.5],
-  zoom: 15
+  style:     'mapbox://styles/mapbox/streets-v12',
+  center:    [-68.15, -16.5],   // Centro inicial: La Paz, Bolivia
+  zoom:      15
 });
 
-const marker = new mapboxgl.Marker()
+// ── Marcador del dispositivo rastreado ────────────────────────────────────
+const marcador = new mapboxgl.Marker({ color: '#3b82f6' })
   .setLngLat([-68.15, -16.5])
   .addTo(map);
 
-/* info de lat log hora */
+// ── Referencias a elementos HTML ──────────────────────────────────────────
+const elLatitud   = document.getElementById('latitud');
+const elLongitud  = document.getElementById('longitud');
+const elHora      = document.getElementById('hora');
 
-const latDiv = document.getElementById('latitud');
-const lngDiv = document.getElementById('longitud');
-const horaDiv = document.getElementById('hora');
+// ── Variables internas de geocerca ────────────────────────────────────────
+let geocercaActiva   = null;  // { lat, lon, radio }
+let estadoAnterior   = null;  // true = adentro, false = afuera
+let circuloLayerId   = null;  // ID del círculo dibujado en el mapa
+let centroMarkerId   = null;  // Marcador del centro de la geocerca
+let modoCreacion     = false; // Indica si el usuario está colocando una geocerca
 
-/* firebase */
+// ── Escuchar ubicación del dispositivo desde Firebase ─────────────────────
+const refUbicacion = ref(database, "ubicacion");
+onValue(refUbicacion, (snapshot) => {
+  const datos = snapshot.val();
+  if (!datos || !datos.latitud || !datos.longitud) return;
 
-const locationRef = ref(database, "ubicacion");
+  const nuevaPos = [datos.longitud, datos.latitud];
 
-onValue(locationRef, (snapshot) => {
-  const data = snapshot.val();
+  // Mover el marcador azul al nuevo punto
+  marcador.setLngLat(nuevaPos);
 
-  if (data && data.latitud && data.longitud && data.timestamp) {
+  // Seguir la posición con la cámara suavemente
+  map.flyTo({ center: nuevaPos, speed: 1.2 });
 
-    const nuevaPosicion = [data.longitud, data.latitud];
+  // Actualizar la barra inferior
+  elLatitud.textContent  = datos.latitud.toFixed(6);
+  elLongitud.textContent = datos.longitud.toFixed(6);
 
-    marker.setLngLat(nuevaPosicion);
+  const fecha = new Date(datos.timestamp);
+  elHora.textContent = fecha.toLocaleString('es-BO');
 
-    map.flyTo({
-      center: nuevaPosicion,
-      speed: 1.5
-    });
-
-    latDiv.textContent = `Latitud: ${data.latitud.toFixed(6)}`;
-    lngDiv.textContent = `Longitud: ${data.longitud.toFixed(6)}`;
-
-    const date = new Date(data.timestamp);
-    horaDiv.textContent = `Hora: ${date.toLocaleString('es-BO')}`;
+  // Verificar si el dispositivo está dentro o fuera de la geocerca
+  if (geocercaActiva) {
+    verificarPosicion(datos.latitud, datos.longitud);
   }
 });
 
-</script>
+// ── Escuchar si la geocerca cambia desde Firebase ─────────────────────────
+// (por ejemplo, si otro dispositivo la modifica)
+const refGeocerca = ref(database, "geocerca");
+onValue(refGeocerca, (snapshot) => {
+  const datos = snapshot.val();
+  if (!datos || !datos.latitud) {
+    // No hay geocerca guardada
+    geocercaActiva = null;
+    document.getElementById('estado-geocerca').style.display = 'none';
+    return;
+  }
 
+  // Solo cargamos la geocerca si tiene lat/lon/radio
+  if (datos.latitud && datos.longitud && datos.radio) {
+    geocercaActiva = { lat: datos.latitud, lon: datos.longitud, radio: datos.radio };
+    document.getElementById('estado-geocerca').style.display = 'block';
+    dibujarCirculoEnMapa(datos.latitud, datos.longitud, datos.radio);
+  }
+});
+
+// ── Dibujar el círculo de geocerca en el mapa ─────────────────────────────
+// Usamos una capa GeoJSON de Mapbox para renderizar un círculo aproximado
+function dibujarCirculoEnMapa(lat, lon, radioMetros) {
+  // Eliminamos el círculo anterior si existía
+  if (map.getLayer('geocerca-relleno'))    map.removeLayer('geocerca-relleno');
+  if (map.getLayer('geocerca-borde'))      map.removeLayer('geocerca-borde');
+  if (map.getSource('geocerca-fuente'))    map.removeSource('geocerca-fuente');
+
+  // Generamos los puntos del círculo (64 segmentos para que sea suave)
+  const puntos  = 64;
+  const coords  = [];
+  // Conversión aproximada: 1 grado de latitud ≈ 111,320 metros
+  const deltaLat = radioMetros / 111320;
+  const deltaLon = radioMetros / (111320 * Math.cos(lat * Math.PI / 180));
+
+  for (let i = 0; i <= puntos; i++) {
+    const angulo = (i / puntos) * 2 * Math.PI;
+    coords.push([
+      lon + deltaLon * Math.cos(angulo),
+      lat + deltaLat * Math.sin(angulo)
+    ]);
+  }
+
+  // Añadimos el polígono circular al mapa como fuente GeoJSON
+  map.addSource('geocerca-fuente', {
+    type: 'geojson',
+    data: {
+      type: 'Feature',
+      geometry: { type: 'Polygon', coordinates: [coords] }
+    }
+  });
+
+  // Capa de relleno semitransparente
+  map.addLayer({
+    id:   'geocerca-relleno',
+    type: 'fill',
+    source: 'geocerca-fuente',
+    paint: {
+      'fill-color':   '#3b82f6',
+      'fill-opacity': 0.12
+    }
+  });
+
+  // Capa del borde punteado
+  map.addLayer({
+    id:   'geocerca-borde',
+    type: 'line',
+    source: 'geocerca-fuente',
+    paint: {
+      'line-color':     '#3b82f6',
+      'line-width':     2,
+      'line-dasharray': [3, 2]
+    }
+  });
+}
+
+// ── Verificar si el dispositivo está dentro o fuera de la geocerca ─────────
+function verificarPosicion(lat, lon) {
+  if (!geocercaActiva) return;
+
+  const distancia = calcularDistanciaMetros(
+    lat, lon,
+    geocercaActiva.lat, geocercaActiva.lon
+  );
+
+  const adentro = distancia <= geocercaActiva.radio;
+
+  // Solo actualizamos cuando cambia el estado (evita notificaciones repetidas)
+  if (estadoAnterior !== adentro) {
+    estadoAnterior = adentro;
+    actualizarIndicadorEstado(adentro, distancia);
+
+    if (!adentro) {
+      // El dispositivo salió de la zona → mostramos notificación
+      mostrarNotificacionSalida(distancia);
+    }
+  } else {
+    // El estado no cambió pero actualizamos el indicador de distancia
+    actualizarIndicadorEstado(adentro, distancia);
+  }
+}
+
+// ── Calcular distancia en metros entre dos coordenadas (Haversine) ─────────
+function calcularDistanciaMetros(lat1, lon1, lat2, lon2) {
+  const R  = 6371000; // Radio de la Tierra en metros
+  const φ1 = lat1 * Math.PI / 180;
+  const φ2 = lat2 * Math.PI / 180;
+  const Δφ = (lat2 - lat1) * Math.PI / 180;
+  const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+  const a = Math.sin(Δφ/2) * Math.sin(Δφ/2)
+           + Math.cos(φ1) * Math.cos(φ2)
+           * Math.sin(Δλ/2) * Math.sin(Δλ/2);
+
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+// ── Actualizar el indicador de estado en la esquina superior izquierda ─────
+function actualizarIndicadorEstado(adentro, distancia) {
+  const panel   = document.getElementById('estado-geocerca');
+  const txtEst  = document.getElementById('texto-estado');
+  const txtDist = document.getElementById('texto-distancia');
+
+  panel.style.display = 'block';
+
+  if (adentro) {
+    txtEst.textContent  = '✅ Dentro del entorno';
+    txtEst.className    = 'estado-valor estado-dentro';
+    txtDist.textContent = `A ${Math.round(distancia)} m del centro`;
+  } else {
+    txtEst.textContent  = '⚠️ Fuera del entorno';
+    txtEst.className    = 'estado-valor estado-fuera';
+    txtDist.textContent = `A ${Math.round(distancia)} m del límite`;
+  }
+}
+
+// ── Mostrar la notificación grande cuando el dispositivo sale ──────────────
+function mostrarNotificacionSalida(distancia) {
+  document.getElementById('noti-distancia-texto').textContent =
+    `Distancia al límite de la zona: ${Math.round(distancia)} metros`;
+  document.getElementById('overlay').style.display      = 'block';
+  document.getElementById('notificacion').style.display = 'block';
+}
+
+// ── Cerrar la notificación ─────────────────────────────────────────────────
+window.cerrarNotificacion = function() {
+  document.getElementById('overlay').style.display      = 'none';
+  document.getElementById('notificacion').style.display = 'none';
+};
+
+// ── CREAR GEOCERCA: activa el modo de clic en el mapa ─────────────────────
+window.crearGeocerca = function() {
+  const radio = parseFloat(document.getElementById('radio-input').value);
+  if (!radio || radio < 10) {
+    alert('Por favor ingresa un radio válido (mínimo 10 metros).');
+    return;
+  }
+
+  modoCreacion = true;
+  map.getCanvas().style.cursor = 'crosshair';
+
+  // Instrucción temporal en pantalla
+  const aviso = document.createElement('div');
+  aviso.id = 'aviso-clic';
+  aviso.style.cssText = `
+    position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
+    background:rgba(15,23,42,0.95); color:white; padding:16px 24px;
+    border-radius:12px; font-size:14px; z-index:9997;
+    border:1px solid rgba(59,130,246,0.5); text-align:center;
+  `;
+  aviso.innerHTML = '🖱️ Haz clic en el mapa<br>para colocar la geocerca';
+  document.body.appendChild(aviso);
+
+  // Al hacer clic en el mapa, colocamos la geocerca
+  map.once('click', function(e) {
+    const lat   = e.lngLat.lat;
+    const lon   = e.lngLat.lng;
+
+    modoCreacion = false;
+    map.getCanvas().style.cursor = '';
+    const avisoBorrar = document.getElementById('aviso-clic');
+    if (avisoBorrar) avisoBorrar.remove();
+
+    // Dibujamos el círculo en el mapa
+    dibujarCirculoEnMapa(lat, lon, radio);
+
+    // Guardamos la geocerca en Firebase para que la app Android también la reciba
+    set(ref(database, "geocerca"), {
+      latitud:  lat,
+      longitud: lon,
+      radio:    radio,
+      creadaEn: Date.now()
+    });
+
+    geocercaActiva = { lat, lon, radio };
+    document.getElementById('estado-geocerca').style.display = 'block';
+    document.getElementById('texto-estado').textContent = 'Geocerca activa';
+    document.getElementById('texto-estado').className   = 'estado-valor estado-sin';
+  });
+};
+
+// ── BORRAR GEOCERCA ────────────────────────────────────────────────────────
+window.borrarGeocerca = function() {
+  if (!geocercaActiva) {
+    alert('No hay ninguna geocerca activa para eliminar.');
+    return;
+  }
+
+  if (!confirm('¿Seguro que deseas eliminar la geocerca actual?')) return;
+
+  // Eliminamos la capa del mapa
+  if (map.getLayer('geocerca-relleno'))  map.removeLayer('geocerca-relleno');
+  if (map.getLayer('geocerca-borde'))    map.removeLayer('geocerca-borde');
+  if (map.getSource('geocerca-fuente'))  map.removeSource('geocerca-fuente');
+
+  // Borramos la geocerca de Firebase
+  remove(ref(database, "geocerca"));
+
+  geocercaActiva  = null;
+  estadoAnterior  = null;
+
+  document.getElementById('estado-geocerca').style.display = 'none';
+};
+
+</script>
 </body>
 </html>
